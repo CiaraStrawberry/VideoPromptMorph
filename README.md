@@ -1,7 +1,7 @@
 # Video Prompt Morph
 A script to allow interpolating between prompts during a video for automatic111s Stable diffusion web UI
 
-[example.webm](https://imgur.com/a/wgV761H)
+[example.webm](https://i.imgur.com/oNxIb3F.mp4)
 
 ## Credits
 - Stable Diffusion - https://github.com/CompVis/stable-diffusion, https://github.com/CompVis/taming-transformers
