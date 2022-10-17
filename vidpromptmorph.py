@@ -81,6 +81,9 @@ class Script(scripts.Script):
     def title(self):
         return "videopromptmorph"
 
+
+
+
     def show(self, is_img2img):
         return is_img2img
 
@@ -102,15 +105,18 @@ class Script(scripts.Script):
         fps = gr.Textbox(label="FPS", value="24", lines=1)
         start_time = gr.Textbox(label="Start time", value="hh:mm:ss", lines=1)
         end_time = gr.Textbox(label="End time", value="hh:mm:ss", lines=1)
+        time_stay_end = gr.Textbox(label="Seconds of Final Prompt", value="0", lines=1)
         show_preview = gr.Checkbox(label='Show preview', value=False)
+        end_denoise = gr.Textbox(label="Denoise Final", value="0", lines=1)
+        #you have to set time_stay and denoise to 0 and 0 for default settings manually, i do not know why these values aren't setting
 
 
 
-        return [input_path, output_path, crf, fps, start_time, end_time, show_preview, start_prompt, end_prompt]
+        return [input_path, output_path, crf, fps, start_time, end_time, show_preview, start_prompt, end_prompt, time_stay_end,end_denoise]
 
 
 
-    def run(self, p, input_path, output_path, crf, fps, start_time, end_time, show_preview, start_prompt, end_prompt):
+    def run(self, p, input_path, output_path, crf, fps, start_time, end_time, show_preview, start_prompt, end_prompt,time_stay_end,end_denoise):
         
         processing.fix_seed(p)
         p.subseed_strength == 0
@@ -161,6 +167,7 @@ class Script(scripts.Script):
             cv2.namedWindow("vid2vid streamig")
 
 
+        #pre-decode the video so the number of frames can be counted
         lengthtest = []
         while True:
             newimage = np_image = decoder.readout(pull_cnt)
@@ -173,6 +180,8 @@ class Script(scripts.Script):
         
         print(len(lengthtest))
         first_frame = True
+        
+        start_denoising = p.denoising_strength
         
         for readoutimage in lengthtest:
             batch = []
@@ -195,12 +204,28 @@ class Script(scripts.Script):
             if frame_num == 0 and len(np_image) > 1:
                 continue
             
-            t = frame_num / (len(lengthtest) - 1)
+            frame_count_to_stay = int(time_stay_end) * int(fps)
+            
+            t = frame_num / ((len(lengthtest) - frame_count_to_stay) - 1)
+            
+            #ensure the weights don't go into negatives
+            if (t > 1):
+                t = 1
+            
+            #create the scaled prompt
             scaled_prompt = self.prompt_at_t(prompt_weights, prompt_flat_list, 1.0 - t)
             scaled_target = self.prompt_at_t(target_weights, prompt_flat_list, t)
             p.prompt = f'{scaled_prompt} AND {scaled_target}'
             print(p.prompt)
             #
+            
+            #only use denoise if a custom value is set
+            if end_denoise != 0:
+                difference = float(end_denoise) - start_denoising;
+                used_denoise = ((t) * difference) + start_denoising;
+                print(str(used_denoise) + str(difference)+ str(p.denoising_strength));
+                p.denoising_strength = used_denoise
+            
             p.seed = [seed for _ in batch] # keep same seed in batch, fix
             proc = process_images(p)  
             if len(proc.images) == 0:
@@ -214,7 +239,9 @@ class Script(scripts.Script):
                 PIL_image = proc.images[i]
                 np_image = np.asarray(PIL_image)
                 encoder.write(np_image)
-
+        
+        
+        p.denoising_strength = start_denoising
         encoder.write_eof()
         if show_preview:
             cv2.destroyAllWindows() 
